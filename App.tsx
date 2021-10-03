@@ -8,115 +8,85 @@
  * @format
  */
 
-import React, {useEffect, useState} from 'react';
-import {
-  Dimensions,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Dimensions, Image, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native';
 
 import faker from 'faker';
 import Odd from './components/Odd';
-import {IndexPath, LargeList, LargeListDataType} from 'react-native-largelist';
+import BigList, { BigListProps } from 'react-native-big-list';
+import Odds from './services/Odds';
+import { Liga } from './domain/Liga';
+import { Partida } from './domain/Partida';
+import PartidaItem from './components/PartidaItem';
 
-export interface User {
-  id: string;
-  image: string;
-  name: string;
-  cvv: string;
-  casa: number;
-  empate: number;
-  fora: number;
-  description: string;
-  option?: string;
-}
+type ItemLiga = Partida[];
 
-// type ItemList = {
-//   type: string;
-//   item: User;
-// };
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
+// const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const App = () => {
-  const [lista, setLista] = useState<LargeListDataType>([]);
+  const [lista, setLista] = useState<any[][]>([] as ItemLiga[]);
   const [canrender, setCanrender] = useState<boolean>(false);
-  const [state, setState] = useState<{users: User[]}>({users: []});
+  const ligasnomes = useRef<string[]>([]);
 
-  useEffect(() => {
-    const fakeData: LargeListDataType = [
-      {
-        items: [] as User[],
-      },
-    ];
-    for (let i = 0; i < 300; i += 1) {
-      fakeData[0].items.push({
-        id: faker.datatype.uuid(),
-        cvv: faker.finance.creditCardCVV(),
-        casa: faker.datatype.number(),
-        empate: faker.datatype.number(),
-        fora: faker.datatype.number(),
-        image: faker.image.avatar(),
-        name: faker.name.firstName(),
-        description: faker.random.words(5),
-      });
-    }
-    console.log(fakeData);
-    setLista(fakeData);
-    setCanrender(true);
+  const preparePartidasLists = useCallback((ligas: Liga[]): void => {
+    console.log('Entrou em prepara Partidas');
+    const itens: ItemLiga[] = [];
+    const itensligas: string[] = [];
+    ligas.forEach((liga) => {
+      itens.push(liga.partviews);
+      itensligas.push(liga.descricao);
+    });
+    setLista(itens);
+    ligasnomes.current = itensligas;
   }, []);
 
-  function handleOdd(user: User, option: string) {
-    const userAdd = {
-      ...user,
-      option,
-    };
-    setState(prevUsers => {
-      const users = prevUsers.users;
-      return {
-        users: [...users, userAdd],
-      };
-    });
-  }
+  const fetchData = useCallback(async () => {
+    console.log('Entrou em fetchData');
+    const res = await Odds.jogosHoje();
+    const resligas: Liga[] = res.data.ligas;
+    preparePartidasLists(resligas);
+    setCanrender(true);
+  }, [preparePartidasLists]);
 
-  const renderItem = ({row}: IndexPath) => {
-    const user = lista[0].items[row];
-    const {description, image, name, cvv, casa, fora, id} = user;
+  useEffect(() => {
+    try {
+      console.log('use Effect!');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  }, [fetchData]);
+
+  // function handleOdd(user: User, option: string) {
+  //   const userAdd = {
+  //     ...user,
+  //     option,
+  //   };
+  //   setState((prevUsers) => {
+  //     const users = prevUsers.users;
+  //     return {
+  //       users: [...users, userAdd],
+  //     };
+  //   });
+  // }
+
+  const renderSectionHeader = (section: number) => {
+    const nomeliga = ligasnomes.current[section];
     return (
-      <View style={styles.listItem}>
-        <Image style={styles.image} source={{uri: image}} />
-        <View style={styles.body}>
-          <Text style={styles.name}>{`${name}`}</Text>
-          <Text style={styles.description}>{description}</Text>
-          <View style={styles.odds}>
-            <Odd
-              value={cvv}
-              id={id}
-              type={'cvv'}
-              selectedItems={state.users}
-              pressHandle={() => handleOdd(user, 'cvv')}
-            />
-            <Odd
-              value={`${casa}`}
-              id={id}
-              type={'casa'}
-              selectedItems={state.users}
-              pressHandle={() => handleOdd(user, 'casa')}
-            />
-            <Odd
-              value={`${fora}`}
-              id={id}
-              type={'fora'}
-              selectedItems={state.users}
-              pressHandle={() => handleOdd(user, 'fora')}
-            />
-          </View>
-        </View>
+      <View style={styles.container}>
+        <Text style={styles.league}>{nomeliga}</Text>
       </View>
+    );
+  };
+
+  const renderItem = ({ item, index, section }: any) => {
+    const partida = lista[section][index];
+    return (
+      <PartidaItem
+        partida={item}
+        // selectedItems={state.apostas}
+        //  onPressItem={oddHandle}
+      />
     );
   };
 
@@ -124,18 +94,12 @@ const App = () => {
     <>
       {canrender && (
         <SafeAreaView style={styles.container}>
-          <StatusBar barStyle="dark-content" />
-          <View style={styles.container2}>
-            <Text
-              style={
-                styles.title
-              }>{`Usuários Selecionados: ${state.users.length}`}</Text>
-          </View>
-          <LargeList
-            style={styles.container}
-            data={lista}
-            heightForIndexPath={() => 150}
-            renderIndexPath={renderItem}
+          <BigList
+            sections={lista}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            itemHeight={70}
+            sectionHeaderHeight={50} // Required to show section header
           />
         </SafeAreaView>
       )}
@@ -150,24 +114,19 @@ const styles = StyleSheet.create({
     minHeight: 1,
     minWidth: 1,
   },
+  league: {
+    textAlign: 'center',
+    fontSize: 16,
+    backgroundColor: '#0070EA',
+    color: '#FFFFFF',
+    padding: 10,
+  },
   container2: {
     flex: 1,
     maxHeight: 50,
     backgroundColor: '#6c5ce7',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  body: {
-    paddingHorizontal: 15,
-    maxWidth: SCREEN_WIDTH - (80 + 20),
-    borderBottomWidth: 1,
-    borderBottomColor: 'lightgray',
-    borderRightWidth: 1,
-    borderRightColor: 'lightgray',
-  },
-  image: {
-    height: 80,
-    width: 80,
   },
   title: {
     fontSize: 16,
